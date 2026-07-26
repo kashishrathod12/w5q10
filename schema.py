@@ -57,7 +57,7 @@ def validate_proposal(p: dict, seen_package_ids: set, seen_action_ids: set) -> N
     if not isinstance(facts["amountMinor"], int):
         raise ValidationError("FACTS_SHAPE", "amountMinor must be an integer (minor units)")
 
-    if not isinstance(p["evidenceRefs"], list) or len(p["evidenceRefs"]) < 1:
+    if not isinstance(p["evidenceRefs"], list) or len(p["evidenceRefs"]) != 3:
         raise ValidationError("EVIDENCE_MISSING", p["packageId"])
 
     rationale = p["rationale"]

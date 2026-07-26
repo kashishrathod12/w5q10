@@ -35,9 +35,15 @@ package, in this exact shape:
   "packageId": "<echo the packageId>",
   "action": "<one of the five actions above>",
   "facts": {"vendorName": "...", "invoiceNumber": "...", "amountMinor": <int minor units>, "currency": "..."},
-  "evidenceRefs": ["[Ex]", "[Ey]"],
+  "evidenceRefs": ["[Ex]", "[Ey]", "[Ez]"],
   "rationale": "60-1500 chars, names the action and cites at least two evidence refs"
 }]
+
+evidenceRefs MUST contain EXACTLY THREE bracketed reference tags — the three \
+decisive tags from the single paragraph that determines the action. Never \
+more, never fewer. Never include a cover-sheet reference, a stale/example \
+reference, or a reference from a paragraph that a later paragraph negates or \
+supersedes.
 """
 
 
@@ -131,9 +137,10 @@ def _heuristic_batch(packages):
                 break
 
         refs = re.findall(r"\[[A-Za-z]?\d+\]", text)
-        # crude "decisive paragraph" pick: the paragraph containing the
-        # keyword that fired, else the first paragraph with any ref
-        evidence = refs[:2] if refs else ["[E1]"]
+        # crude "decisive paragraph" pick: the first three refs found, padded
+        # with placeholders if the text has fewer than three tags. This is a
+        # blunt heuristic — see README for why a real model call matters here.
+        evidence = (refs + ["[E1]", "[E2]", "[E3]"])[:3]
 
         vendor_m = re.search(r"[Vv]endor[:\s]+([A-Za-z0-9 &.,'-]{2,40})", text)
         inv_m = re.search(r"[Ii]nvoice\s*(?:No\.?|Number)?[:\s#]+([A-Za-z0-9-]{2,20})", text)

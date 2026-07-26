@@ -73,16 +73,22 @@ def require_auth(authorization: Optional[str]) -> str:
     return token
 
 
-def require_protocol_headers(a2a_version: Optional[str], content_type: Optional[str]):
+def require_protocol_headers(
+    a2a_version: Optional[str],
+    content_type: Optional[str] = None,
+    require_content_type: bool = False,
+):
     if a2a_version is None:
         raise HTTPException(status_code=401, detail=error_body("MISSING_VERSION_HEADER")["error"])
     if a2a_version != A2A_VERSION:
         raise HTTPException(status_code=400, detail=error_body("UNSUPPORTED_VERSION")["error"])
-    # We accept application/a2a+json and application/json for local testing
-    # convenience; a strict grader deployment should require exactly
-    # application/a2a+json — tighten this check before submitting.
-    if content_type and "json" not in content_type:
-        raise HTTPException(status_code=400, detail=error_body("UNSUPPORTED_MEDIA_TYPE")["error"])
+    if require_content_type:
+        # Exact match on the base media type, ignoring an optional
+        # ``; charset=...`` parameter. Anything else (including plain
+        # application/json) must be rejected with 400.
+        base_ct = (content_type or "").split(";")[0].strip().lower()
+        if base_ct != A2A_CONTENT_TYPE:
+            raise HTTPException(status_code=400, detail=error_body("UNSUPPORTED_MEDIA_TYPE")["error"])
 
 
 def task_to_wire(t: dict) -> dict:
@@ -145,7 +151,7 @@ async def message_send(
     content_type: Optional[str] = Header(None, alias="Content-Type"),
 ):
     principal = require_auth(authorization)
-    require_protocol_headers(a2a_version, content_type)
+    require_protocol_headers(a2a_version, content_type, require_content_type=True)
 
     body = await request.json()
     message = body.get("message")
@@ -344,14 +350,14 @@ def get_task(
     a2a_version: Optional[str] = Header(None, alias="A2A-Version"),
 ):
     principal = require_auth(authorization)
-    require_protocol_headers(a2a_version, "application/a2a+json")
+    require_protocol_headers(a2a_version)
 
     conn = storage.read_conn()
     task = storage.get_task(conn, task_id)
     conn.close()
     if not task or task["principal"] != principal:
         raise HTTPException(status_code=404, detail=error_body("NOT_FOUND")["error"])
-    return a2a_json({"task": task_to_wire(task)})
+    return a2a_json(task_to_wire(task))
 
 
 @app.get("/a2a/tasks")
@@ -360,7 +366,7 @@ def list_tasks(
     a2a_version: Optional[str] = Header(None, alias="A2A-Version"),
 ):
     principal = require_auth(authorization)
-    require_protocol_headers(a2a_version, "application/a2a+json")
+    require_protocol_headers(a2a_version)
 
     conn = storage.read_conn()
     rows = storage.list_tasks(conn, principal)
@@ -375,7 +381,7 @@ def cancel_task(
     a2a_version: Optional[str] = Header(None, alias="A2A-Version"),
 ):
     principal = require_auth(authorization)
-    require_protocol_headers(a2a_version, "application/a2a+json")
+    require_protocol_headers(a2a_version)
 
     with storage.write_txn() as conn:
         task = storage.get_task(conn, task_id)
@@ -388,4 +394,4 @@ def cancel_task(
 
         storage.update_task(conn, task_id, state=STATE_CANCELED)
         task_row = storage.get_task(conn, task_id)
-        return a2a_json({"task": task_to_wire(task_row)})
+        return a2a_json(task_to_wire(task_row))
