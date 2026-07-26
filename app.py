@@ -25,6 +25,7 @@ from schema import (
     MEDIA_RESULTS,
     MEDIA_RECEIPTS,
     A2A_VERSION,
+    A2A_CONTENT_TYPE,
     ValidationError,
     validate_proposal,
     canonical_json,
@@ -50,6 +51,12 @@ def error_body(code: str, message: str = "request could not be completed"):
     # Deliberately generic — never echoes another principal's task id or
     # confirms/denies existence of a resource that isn't theirs.
     return {"error": {"code": code, "message": message}}
+
+
+def a2a_json(payload: dict, status_code: int = 200) -> JSONResponse:
+    """Every successful A2A response must be served with the A2A JSON media
+    type, not FastAPI's default application/json."""
+    return JSONResponse(payload, status_code=status_code, media_type=A2A_CONTENT_TYPE)
 
 
 def require_auth(authorization: Optional[str]) -> str:
@@ -125,7 +132,7 @@ def agent_card():
         "defaultInputModes": [MEDIA_BATCH, MEDIA_RESULTS],
         "defaultOutputModes": [MEDIA_PROPOSALS, MEDIA_RECEIPTS],
     }
-    return JSONResponse(card)
+    return a2a_json(card)
 
 
 # ------------------------------------------------------------- message:send --
@@ -158,7 +165,7 @@ async def message_send(
                 )
             import json
 
-            return JSONResponse(json.loads(existing["response"]))
+            return a2a_json(json.loads(existing["response"]))
 
         parts = message["parts"]
         part = parts[0] if parts else {}
@@ -171,7 +178,7 @@ async def message_send(
         else:
             raise HTTPException(status_code=400, detail=error_body("UNSUPPORTED_MEDIA_TYPE")["error"])
 
-        return JSONResponse(response)
+        return a2a_json(response)
 
 
 def _handle_new_batch(conn, principal, message, message_id, content_hash):
@@ -344,7 +351,7 @@ def get_task(
     conn.close()
     if not task or task["principal"] != principal:
         raise HTTPException(status_code=404, detail=error_body("NOT_FOUND")["error"])
-    return {"task": task_to_wire(task)}
+    return a2a_json({"task": task_to_wire(task)})
 
 
 @app.get("/a2a/tasks")
@@ -358,7 +365,7 @@ def list_tasks(
     conn = storage.read_conn()
     rows = storage.list_tasks(conn, principal)
     conn.close()
-    return {"tasks": [task_to_wire(t) for t in rows]}
+    return a2a_json({"tasks": [task_to_wire(t) for t in rows]})
 
 
 @app.post("/a2a/tasks/{task_id}:cancel")
@@ -381,4 +388,4 @@ def cancel_task(
 
         storage.update_task(conn, task_id, state=STATE_CANCELED)
         task_row = storage.get_task(conn, task_id)
-        return {"task": task_to_wire(task_row)}
+        return a2a_json({"task": task_to_wire(task_row)})
